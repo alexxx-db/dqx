@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from databricks_labs_dqx_app.backend.dependencies import get_discovery_service
 from databricks_labs_dqx_app.backend.logger import logger
-from databricks_labs_dqx_app.backend.models import CatalogOut, ColumnOut, SchemaOut, TableOut
+from databricks_labs_dqx_app.backend.models import CatalogOut, ColumnOut, SchemaOut, TableOut, TableTagsOut
 from databricks_labs_dqx_app.backend.services.discovery import DiscoveryService
 
 router = APIRouter()
@@ -94,3 +94,27 @@ async def get_table_columns(
     except Exception as e:
         logger.error(f"Failed to get columns for {catalog}.{schema}.{table}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get table columns: {e}")
+
+
+@router.get(
+    "/catalogs/{catalog}/schemas/{schema}/tables/{table}/tags",
+    response_model=TableTagsOut,
+    operation_id="get_table_tags",
+)
+async def get_table_tags(
+    catalog: str,
+    schema: str,
+    table: str,
+    discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> TableTagsOut:
+    """Get Unity Catalog tags for a table and its columns."""
+    try:
+        tags = await discovery.get_table_tags_async(catalog, schema, table)
+        return TableTagsOut(
+            table_fqn=tags.table_fqn,
+            table_tags=tags.table_tags,
+            column_tags=tags.column_tags,
+        )
+    except Exception as e:
+        logger.error(f"Failed to get tags for {catalog}.{schema}.{table}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get table tags: {e}")

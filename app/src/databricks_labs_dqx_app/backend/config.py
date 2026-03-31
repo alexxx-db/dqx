@@ -31,6 +31,11 @@ class AppConfig(BaseSettings):
     tmp_schema_name: str = Field(default="dqx_app_tmp", validation_alias="DQX_TMP_SCHEMA")
     job_id: str = Field(default="", validation_alias="DQX_JOB_ID")
     llm_endpoint: str = Field(default="databricks-claude-sonnet-4-5", validation_alias="DQX_LLM_ENDPOINT")
+    admin_group: str | None = Field(
+        default=None,
+        validation_alias="DQX_ADMIN_GROUP",
+        description="Databricks workspace group name for bootstrap Admin access",
+    )
     profiler_max_sample_limit: int = Field(default=100_000)
     profiler_default_sample_limit: int = Field(default=50_000)
     dryrun_max_sample_size: int = Field(default=10_000)

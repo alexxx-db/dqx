@@ -182,9 +182,10 @@ function GenerateRulesPage() {
         toast.warning("No rules were generated. Try a more specific description.");
         return;
       }
-      setChecks(generated);
+      // Append generated rules to existing ones instead of replacing
+      setChecks((prev) => [...prev, ...generated]);
       setDryRunResult(null);
-      toast.success(`Generated ${generated.length} rule(s)`);
+      toast.success(`Added ${generated.length} rule(s) (total: ${checks.length + generated.length})`);
     } catch {
       toast.error("Failed to generate rules");
     }
@@ -327,7 +328,7 @@ function GenerateRulesPage() {
           </CardTitle>
           <CardDescription>
             {isEditMode
-              ? "Optionally regenerate rules with AI. This will replace the current rules."
+              ? "Optionally add more rules with AI. Generated rules will be added to the existing ones."
               : "Describe what data quality checks you need in plain English."}
           </CardDescription>
         </CardHeader>

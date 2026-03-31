@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { FadeIn } from "@/components/anim/FadeIn";
 import { ShinyText } from "@/components/anim/ShinyText";
+import { RoleManagement } from "@/components/RoleManagement";
 
 export const Route = createFileRoute("/_sidebar/config")({
   component: () => <ConfigPage />,
@@ -330,6 +331,12 @@ function ConfigPage() {
                   </ErrorBoundary>
                 </CardContent>
               </Card>
+            </FadeIn>
+
+            <FadeIn delay={0.15}>
+              <ErrorBoundary onReset={reset} fallbackRender={SectionError}>
+                <RoleManagement />
+              </ErrorBoundary>
             </FadeIn>
 
             <FadeIn delay={0.2}>

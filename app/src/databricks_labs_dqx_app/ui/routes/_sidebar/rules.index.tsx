@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, Suspense, useMemo } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { PageBreadcrumb } from "@/components/apx/PageBreadcrumb";
 import {
   Card,
@@ -27,6 +28,7 @@ import {
   XCircle,
   Clock,
   FileEdit,
+  Tag,
 } from "lucide-react";
 import { FadeIn } from "@/components/anim/FadeIn";
 import { ShinyText } from "@/components/anim/ShinyText";
@@ -37,12 +39,46 @@ import {
   useSubmitRulesForApproval,
   useApproveRules,
   useRejectRules,
+  getTableTags,
   type RuleCatalogEntryOut,
 } from "@/lib/api";
+import { usePermissions } from "@/hooks/use-permissions";
+
+// Parse table_fqn format: catalog.schema.table
+function parseFqn(fqn: string) {
+  const parts = fqn.split(".");
+  return {
+    catalog: parts[0] || "",
+    schema: parts[1] || "",
+    table: parts[2] || "",
+  };
+}
 
 export const Route = createFileRoute("/_sidebar/rules/")({
-  component: RulesIndexPage,
+  component: () => (
+    <Suspense fallback={<RulesPageSkeleton />}>
+      <RulesIndexPage />
+    </Suspense>
+  ),
 });
+
+function RulesPageSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-24" />
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-28" />
+        </div>
+      </div>
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Statuses" },
@@ -90,7 +126,13 @@ function statusBadge(status: string) {
 function RulesIndexPage() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
+  const [catalogFilter, setCatalogFilter] = useState("all");
+  const [schemaFilter, setSchemaFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const { canCreateRules, canEditRules, canSubmitRules, canApproveRules } =
+    usePermissions();
 
   const {
     data: rulesResp,
@@ -100,7 +142,108 @@ function RulesIndexPage() {
   } = useListRules(
     statusFilter === "all" ? {} : { status: statusFilter },
   );
-  const rules: RuleCatalogEntryOut[] = Array.isArray(rulesResp?.data) ? rulesResp.data : [];
+  const allRules: RuleCatalogEntryOut[] = Array.isArray(rulesResp?.data) ? rulesResp.data : [];
+
+  // Extract unique catalogs and schemas from rules
+  const { catalogs, schemasByCatalog } = useMemo(() => {
+    const catalogSet = new Set<string>();
+    const schemaMap = new Map<string, Set<string>>();
+
+    for (const rule of allRules) {
+      const { catalog, schema } = parseFqn(rule.table_fqn);
+      if (catalog) {
+        catalogSet.add(catalog);
+        if (!schemaMap.has(catalog)) {
+          schemaMap.set(catalog, new Set());
+        }
+        if (schema) {
+          schemaMap.get(catalog)!.add(schema);
+        }
+      }
+    }
+
+    return {
+      catalogs: Array.from(catalogSet).sort(),
+      schemasByCatalog: Object.fromEntries(
+        Array.from(schemaMap.entries()).map(([cat, schemas]) => [
+          cat,
+          Array.from(schemas).sort(),
+        ])
+      ),
+    };
+  }, [allRules]);
+
+  // Fetch tags for all tables
+  const tagQueries = useQueries({
+    queries: allRules.map((rule) => {
+      const { catalog, schema, table } = parseFqn(rule.table_fqn);
+      return {
+        queryKey: ["tableTags", catalog, schema, table],
+        queryFn: () => getTableTags(catalog, schema, table),
+        enabled: !!catalog && !!schema && !!table,
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        retry: false,
+      };
+    }),
+  });
+
+  // Build tags map: table_fqn -> all tags (table + column tags)
+  const tagsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    tagQueries.forEach((query, idx) => {
+      if (query.data?.data) {
+        const tableFqn = allRules[idx]?.table_fqn;
+        if (tableFqn) {
+          const allTags = [
+            ...(query.data.data.table_tags || []),
+            ...Object.values(query.data.data.column_tags || {}).flat(),
+          ];
+          map[tableFqn] = [...new Set(allTags)]; // unique tags
+        }
+      }
+    });
+    return map;
+  }, [tagQueries, allRules]);
+
+  // Get all unique tags across all tables
+  const allUniqueTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    Object.values(tagsMap).forEach((tags) => {
+      tags.forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort();
+  }, [tagsMap]);
+
+  // Apply filters
+  const rules = useMemo(() => {
+    return allRules.filter((rule) => {
+      const { catalog, schema } = parseFqn(rule.table_fqn);
+
+      // Catalog filter
+      if (catalogFilter !== "all" && catalog !== catalogFilter) return false;
+
+      // Schema filter
+      if (schemaFilter !== "all" && schema !== schemaFilter) return false;
+
+      // Tag filter
+      if (tagFilter !== "all") {
+        const ruleTags = tagsMap[rule.table_fqn] || [];
+        if (!ruleTags.includes(tagFilter)) return false;
+      }
+
+      return true;
+    });
+  }, [allRules, catalogFilter, schemaFilter, tagFilter, tagsMap]);
+
+  // Get schemas for the selected catalog
+  const availableSchemas =
+    catalogFilter !== "all" ? schemasByCatalog[catalogFilter] || [] : [];
+
+  // Reset schema filter when catalog changes
+  const handleCatalogChange = (value: string) => {
+    setCatalogFilter(value);
+    setSchemaFilter("all");
+  };
 
   const deleteRulesMutation = useDeleteRules();
   const submitMutation = useSubmitRulesForApproval();
@@ -188,39 +331,124 @@ function RulesIndexPage() {
               Manage data quality rule sets for your tables.
             </p>
           </div>
-          <Button onClick={() => navigate({ to: "/rules/generate" })} className="gap-2">
-            <Plus className="h-4 w-4" />
-            New Rules
-          </Button>
+          {canCreateRules && (
+            <Button onClick={() => navigate({ to: "/rules/generate" })} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Rules
+            </Button>
+          )}
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <BookCheck className="h-5 w-5" />
-                Rule Sets
-              </CardTitle>
-              <CardDescription>
-                {isLoading
-                  ? "Loading..."
-                  : `${rules.length} rule set${rules.length !== 1 ? "s" : ""}`}
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BookCheck className="h-5 w-5" />
+                  Rule Sets
+                </CardTitle>
+                <CardDescription>
+                  {isLoading
+                    ? "Loading..."
+                    : `${rules.length} rule set${rules.length !== 1 ? "s" : ""}${
+                        rules.length !== allRules.length
+                          ? ` (filtered from ${allRules.length})`
+                          : ""
+                      }`}
+                </CardDescription>
+              </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+            {/* Filter bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Catalog filter */}
+              <Select value={catalogFilter} onValueChange={handleCatalogChange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="All Catalogs" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Catalogs</SelectItem>
+                  {catalogs.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Schema filter */}
+              <Select
+                value={schemaFilter}
+                onValueChange={setSchemaFilter}
+                disabled={catalogFilter === "all"}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="All Schemas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Schemas</SelectItem>
+                  {availableSchemas.map((sch) => (
+                    <SelectItem key={sch} value={sch}>
+                      {sch}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Tags filter */}
+              <Select value={tagFilter} onValueChange={setTagFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                    <SelectValue placeholder="All Tags" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Tags</SelectItem>
+                  {allUniqueTags.map((tag) => (
+                    <SelectItem key={tag} value={tag}>
+                      {tag}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Status filter */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Clear filters button */}
+              {(catalogFilter !== "all" ||
+                schemaFilter !== "all" ||
+                tagFilter !== "all" ||
+                statusFilter !== "all") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs"
+                  onClick={() => {
+                    setCatalogFilter("all");
+                    setSchemaFilter("all");
+                    setTagFilter("all");
+                    setStatusFilter("all");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -245,6 +473,7 @@ function RulesIndexPage() {
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="text-left p-3 font-medium">Table</th>
+                      <th className="text-left p-3 font-medium">Tags</th>
                       <th className="text-left p-3 font-medium">Status</th>
                       <th className="text-left p-3 font-medium">Version</th>
                       <th className="text-left p-3 font-medium">Rules</th>
@@ -267,6 +496,30 @@ function RulesIndexPage() {
                         <td className="p-3 font-mono text-xs">
                           {rule.table_fqn}
                         </td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {(tagsMap[rule.table_fqn] || []).slice(0, 3).map((tag) => (
+                              <Badge
+                                key={tag}
+                                variant="outline"
+                                className="text-[10px] py-0 px-1.5 font-normal"
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                            {(tagsMap[rule.table_fqn]?.length ?? 0) > 3 && (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] py-0 px-1.5 font-normal"
+                              >
+                                +{(tagsMap[rule.table_fqn]?.length ?? 0) - 3}
+                              </Badge>
+                            )}
+                            {!tagsMap[rule.table_fqn]?.length && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3">{statusBadge(rule.status)}</td>
                         <td className="p-3 tabular-nums">v{rule.version}</td>
                         <td className="p-3 tabular-nums">
@@ -282,7 +535,7 @@ function RulesIndexPage() {
                             className="flex items-center justify-end gap-1"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {rule.status === "draft" && (
+                            {rule.status === "draft" && canSubmitRules && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -294,7 +547,7 @@ function RulesIndexPage() {
                                 {pendingAction === rule.table_fqn ? "Submitting..." : "Submit"}
                               </Button>
                             )}
-                            {rule.status === "pending_approval" && (
+                            {rule.status === "pending_approval" && canApproveRules && (
                               <>
                                 <Button
                                   size="sm"
@@ -318,15 +571,17 @@ function RulesIndexPage() {
                                 </Button>
                               </>
                             )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={isBusy}
-                              onClick={() => handleDelete(rule.table_fqn)}
-                              className="h-7 text-xs text-destructive"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
+                            {canEditRules && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={isBusy}
+                                onClick={() => handleDelete(rule.table_fqn)}
+                                className="h-7 text-xs text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -346,16 +601,19 @@ function RulesIndexPage() {
                 No Rules Yet
               </h3>
               <p className="text-muted-foreground/70 text-sm mt-1 max-w-md">
-                Create your first rule set by selecting a table and generating
-                rules with AI.
+                {canCreateRules
+                  ? "Create your first rule set by selecting a table and generating rules with AI."
+                  : "No rules have been created yet. Contact an administrator to create rules."}
               </p>
-              <Button
-                onClick={() => navigate({ to: "/rules/generate" })}
-                className="mt-4 gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                New Rules
-              </Button>
+              {canCreateRules && (
+                <Button
+                  onClick={() => navigate({ to: "/rules/generate" })}
+                  className="mt-4 gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Rules
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

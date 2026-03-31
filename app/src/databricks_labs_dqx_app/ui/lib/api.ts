@@ -83,6 +83,13 @@ export interface ConfigOut {
   config: WorkspaceConfigOutput;
 }
 
+export interface CreateRoleMappingIn {
+  /** Role name (admin, rule_approver, rule_author, viewer) */
+  role: string;
+  /** Databricks workspace group name */
+  group_name: string;
+}
+
 export type DryRunInChecksItem = { [key: string]: unknown };
 
 export interface DryRunIn {
@@ -135,6 +142,7 @@ export interface ExtraParams {
   user_metadata?: ExtraParamsUserMetadata;
   run_time_overwrite?: ExtraParamsRunTimeOverwrite;
   run_id_overwrite?: ExtraParamsRunIdOverwrite;
+  suppress_skipped?: boolean;
 }
 
 /**
@@ -158,6 +166,18 @@ export interface GenerateChecksOut {
   checks: GenerateChecksOutChecksItem[];
   /** Validation errors if any */
   validation_errors?: string[];
+}
+
+/**
+ * Group ID
+ */
+export type GroupOutId = string | null;
+
+export interface GroupOut {
+  /** Group display name */
+  display_name: string;
+  /** Group ID */
+  id?: GroupOutId;
 }
 
 export interface HTTPValidationError {
@@ -306,6 +326,25 @@ export interface ProfilerConfig {
   max_empty_ratio?: ProfilerConfigMaxEmptyRatio;
 }
 
+export type RoleMappingOutCreatedBy = string | null;
+
+export type RoleMappingOutCreatedAt = string | null;
+
+export type RoleMappingOutUpdatedBy = string | null;
+
+export type RoleMappingOutUpdatedAt = string | null;
+
+export interface RoleMappingOut {
+  /** Role name (admin, rule_approver, rule_author, viewer) */
+  role: string;
+  /** Databricks workspace group name */
+  group_name: string;
+  created_by?: RoleMappingOutCreatedBy;
+  created_at?: RoleMappingOutCreatedAt;
+  updated_by?: RoleMappingOutUpdatedBy;
+  updated_at?: RoleMappingOutUpdatedAt;
+}
+
 export type RuleCatalogEntryOutChecksItem = { [key: string]: unknown };
 
 export type RuleCatalogEntryOutCreatedBy = string | null;
@@ -429,6 +468,20 @@ export interface TableOut {
   comment?: TableOutComment;
 }
 
+/**
+ * Column name to list of tags mapping
+ */
+export type TableTagsOutColumnTags = { [key: string]: string[] };
+
+export interface TableTagsOut {
+  /** Fully qualified table name */
+  table_fqn: string;
+  /** Tags assigned to the table */
+  table_tags?: string[];
+  /** Column name to list of tags mapping */
+  column_tags?: TableTagsOutColumnTags;
+}
+
 export type UserActive = boolean | null;
 
 export type UserDisplayName = string | null;
@@ -468,6 +521,8 @@ export interface User {
 export interface UserRoleOut {
   email: string;
   role: string;
+  /** List of permissions granted to this role */
+  permissions?: string[];
 }
 
 export type UserSchema = (typeof UserSchema)[keyof typeof UserSchema];
@@ -651,6 +706,8 @@ export interface WorkspaceConfigOutput {
   custom_metrics?: WorkspaceConfigOutputCustomMetrics;
   llm_config?: LLMConfig;
 }
+
+export type DeleteRoleMapping200 = { [key: string]: string };
 
 export type ListRulesParams = {
   /**
@@ -2202,6 +2259,996 @@ export const useSaveRunConfig = <
 };
 
 /**
+ * List all role-to-group mappings (Admin only).
+ * @summary List Role Mappings
+ */
+export const listRoleMappings = (
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<RoleMappingOut[]>> => {
+  return axios.default.get(`/api/v1/roles`, options);
+};
+
+export const getListRoleMappingsQueryKey = () => {
+  return [`/api/v1/roles`] as const;
+};
+
+export const getListRoleMappingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof listRoleMappings>>, TError, TData>
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRoleMappingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRoleMappings>>
+  > = ({ signal }) => listRoleMappings({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRoleMappings>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListRoleMappingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRoleMappings>>
+>;
+export type ListRoleMappingsQueryError = AxiosError<HTTPValidationError>;
+
+export function useListRoleMappings<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRoleMappings>>,
+          TError,
+          Awaited<ReturnType<typeof listRoleMappings>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListRoleMappings<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRoleMappings>>,
+          TError,
+          Awaited<ReturnType<typeof listRoleMappings>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListRoleMappings<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Role Mappings
+ */
+
+export function useListRoleMappings<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListRoleMappingsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getListRoleMappingsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseSuspenseQueryOptions<
+      Awaited<ReturnType<typeof listRoleMappings>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListRoleMappingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRoleMappings>>
+  > = ({ signal }) => listRoleMappings({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof listRoleMappings>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListRoleMappingsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRoleMappings>>
+>;
+export type ListRoleMappingsSuspenseQueryError =
+  AxiosError<HTTPValidationError>;
+
+export function useListRoleMappingsSuspense<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListRoleMappingsSuspense<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListRoleMappingsSuspense<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Role Mappings
+ */
+
+export function useListRoleMappingsSuspense<
+  TData = Awaited<ReturnType<typeof listRoleMappings>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listRoleMappings>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListRoleMappingsSuspenseQueryOptions(options);
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+/**
+ * Create or update a role-to-group mapping (Admin only).
+ * @summary Create Role Mapping
+ */
+export const createRoleMapping = (
+  createRoleMappingIn: CreateRoleMappingIn,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<RoleMappingOut>> => {
+  return axios.default.post(`/api/v1/roles`, createRoleMappingIn, options);
+};
+
+export const getCreateRoleMappingMutationOptions = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createRoleMapping>>,
+    TError,
+    { data: CreateRoleMappingIn },
+    TContext
+  >;
+  axios?: AxiosRequestConfig;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createRoleMapping>>,
+  TError,
+  { data: CreateRoleMappingIn },
+  TContext
+> => {
+  const mutationKey = ["createRoleMapping"];
+  const { mutation: mutationOptions, axios: axiosOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, axios: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createRoleMapping>>,
+    { data: CreateRoleMappingIn }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createRoleMapping(data, axiosOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateRoleMappingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createRoleMapping>>
+>;
+export type CreateRoleMappingMutationBody = CreateRoleMappingIn;
+export type CreateRoleMappingMutationError = AxiosError<HTTPValidationError>;
+
+/**
+ * @summary Create Role Mapping
+ */
+export const useCreateRoleMapping = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createRoleMapping>>,
+      TError,
+      { data: CreateRoleMappingIn },
+      TContext
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createRoleMapping>>,
+  TError,
+  { data: CreateRoleMappingIn },
+  TContext
+> => {
+  const mutationOptions = getCreateRoleMappingMutationOptions(options);
+
+  return useMutation(mutationOptions, queryClient);
+};
+
+/**
+ * Delete a role-to-group mapping (Admin only).
+ * @summary Delete Role Mapping
+ */
+export const deleteRoleMapping = (
+  role: string,
+  groupName: string,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<DeleteRoleMapping200>> => {
+  return axios.default.delete(`/api/v1/roles/${role}/${groupName}`, options);
+};
+
+export const getDeleteRoleMappingMutationOptions = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteRoleMapping>>,
+    TError,
+    { role: string; groupName: string },
+    TContext
+  >;
+  axios?: AxiosRequestConfig;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteRoleMapping>>,
+  TError,
+  { role: string; groupName: string },
+  TContext
+> => {
+  const mutationKey = ["deleteRoleMapping"];
+  const { mutation: mutationOptions, axios: axiosOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, axios: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteRoleMapping>>,
+    { role: string; groupName: string }
+  > = (props) => {
+    const { role, groupName } = props ?? {};
+
+    return deleteRoleMapping(role, groupName, axiosOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteRoleMappingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteRoleMapping>>
+>;
+
+export type DeleteRoleMappingMutationError = AxiosError<HTTPValidationError>;
+
+/**
+ * @summary Delete Role Mapping
+ */
+export const useDeleteRoleMapping = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteRoleMapping>>,
+      TError,
+      { role: string; groupName: string },
+      TContext
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteRoleMapping>>,
+  TError,
+  { role: string; groupName: string },
+  TContext
+> => {
+  const mutationOptions = getDeleteRoleMappingMutationOptions(options);
+
+  return useMutation(mutationOptions, queryClient);
+};
+
+/**
+ * List available Databricks workspace groups (Admin only).
+
+Uses the user's OBO token to list groups they have visibility into.
+ * @summary List Workspace Groups
+ */
+export const listWorkspaceGroups = (
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<GroupOut[]>> => {
+  return axios.default.get(`/api/v1/roles/groups`, options);
+};
+
+export const getListWorkspaceGroupsQueryKey = () => {
+  return [`/api/v1/roles/groups`] as const;
+};
+
+export const getListWorkspaceGroupsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof listWorkspaceGroups>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListWorkspaceGroupsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listWorkspaceGroups>>
+  > = ({ signal }) => listWorkspaceGroups({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listWorkspaceGroups>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListWorkspaceGroupsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listWorkspaceGroups>>
+>;
+export type ListWorkspaceGroupsQueryError = AxiosError<HTTPValidationError>;
+
+export function useListWorkspaceGroups<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWorkspaceGroups>>,
+          TError,
+          Awaited<ReturnType<typeof listWorkspaceGroups>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListWorkspaceGroups<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWorkspaceGroups>>,
+          TError,
+          Awaited<ReturnType<typeof listWorkspaceGroups>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListWorkspaceGroups<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Workspace Groups
+ */
+
+export function useListWorkspaceGroups<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListWorkspaceGroupsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getListWorkspaceGroupsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseSuspenseQueryOptions<
+      Awaited<ReturnType<typeof listWorkspaceGroups>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListWorkspaceGroupsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listWorkspaceGroups>>
+  > = ({ signal }) => listWorkspaceGroups({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof listWorkspaceGroups>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListWorkspaceGroupsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listWorkspaceGroups>>
+>;
+export type ListWorkspaceGroupsSuspenseQueryError =
+  AxiosError<HTTPValidationError>;
+
+export function useListWorkspaceGroupsSuspense<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListWorkspaceGroupsSuspense<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListWorkspaceGroupsSuspense<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Workspace Groups
+ */
+
+export function useListWorkspaceGroupsSuspense<
+  TData = Awaited<ReturnType<typeof listWorkspaceGroups>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listWorkspaceGroups>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListWorkspaceGroupsSuspenseQueryOptions(options);
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+/**
+ * List all available role names that can be assigned (Admin only).
+ * @summary List Available Roles
+ */
+export const listAvailableRoles = (
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<string[]>> => {
+  return axios.default.get(`/api/v1/roles/available-roles`, options);
+};
+
+export const getListAvailableRolesQueryKey = () => {
+  return [`/api/v1/roles/available-roles`] as const;
+};
+
+export const getListAvailableRolesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof listAvailableRoles>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAvailableRolesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAvailableRoles>>
+  > = ({ signal }) => listAvailableRoles({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAvailableRoles>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListAvailableRolesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAvailableRoles>>
+>;
+export type ListAvailableRolesQueryError = AxiosError<HTTPValidationError>;
+
+export function useListAvailableRoles<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAvailableRoles>>,
+          TError,
+          Awaited<ReturnType<typeof listAvailableRoles>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAvailableRoles<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAvailableRoles>>,
+          TError,
+          Awaited<ReturnType<typeof listAvailableRoles>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAvailableRoles<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Available Roles
+ */
+
+export function useListAvailableRoles<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListAvailableRolesQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getListAvailableRolesSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(options?: {
+  query?: Partial<
+    UseSuspenseQueryOptions<
+      Awaited<ReturnType<typeof listAvailableRoles>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAvailableRolesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAvailableRoles>>
+  > = ({ signal }) => listAvailableRoles({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof listAvailableRoles>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListAvailableRolesSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAvailableRoles>>
+>;
+export type ListAvailableRolesSuspenseQueryError =
+  AxiosError<HTTPValidationError>;
+
+export function useListAvailableRolesSuspense<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAvailableRolesSuspense<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAvailableRolesSuspense<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Available Roles
+ */
+
+export function useListAvailableRolesSuspense<
+  TData = Awaited<ReturnType<typeof listAvailableRoles>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAvailableRoles>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListAvailableRolesSuspenseQueryOptions(options);
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+/**
  * @summary List Catalogs
  */
 export const listCatalogs = (
@@ -3364,6 +4411,323 @@ export function useGetTableColumnsSuspense<
 }
 
 /**
+ * Get Unity Catalog tags for a table and its columns.
+ * @summary Get Table Tags
+ */
+export const getTableTags = (
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<TableTagsOut>> => {
+  return axios.default.get(
+    `/api/v1/discovery/catalogs/${catalog}/schemas/${schema}/tables/${table}/tags`,
+    options,
+  );
+};
+
+export const getGetTableTagsQueryKey = (
+  catalog?: string,
+  schema?: string,
+  table?: string,
+) => {
+  return [
+    `/api/v1/discovery/catalogs/${catalog}/schemas/${schema}/tables/${table}/tags`,
+  ] as const;
+};
+
+export const getGetTableTagsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTableTags>>, TError, TData>
+    >;
+    axios?: AxiosRequestConfig;
+  },
+) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTableTagsQueryKey(catalog, schema, table);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTableTags>>> = ({
+    signal,
+  }) => getTableTags(catalog, schema, table, { signal, ...axiosOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(catalog && schema && table),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTableTags>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTableTagsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTableTags>>
+>;
+export type GetTableTagsQueryError = AxiosError<HTTPValidationError>;
+
+export function useGetTableTags<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTableTags>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTableTags>>,
+          TError,
+          Awaited<ReturnType<typeof getTableTags>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTableTags<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTableTags>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTableTags>>,
+          TError,
+          Awaited<ReturnType<typeof getTableTags>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTableTags<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTableTags>>, TError, TData>
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary Get Table Tags
+ */
+
+export function useGetTableTags<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTableTags>>, TError, TData>
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTableTagsQueryOptions(
+    catalog,
+    schema,
+    table,
+    options,
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getGetTableTagsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof getTableTags>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTableTagsQueryKey(catalog, schema, table);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTableTags>>> = ({
+    signal,
+  }) => getTableTags(catalog, schema, table, { signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof getTableTags>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetTableTagsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTableTags>>
+>;
+export type GetTableTagsSuspenseQueryError = AxiosError<HTTPValidationError>;
+
+export function useGetTableTagsSuspense<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof getTableTags>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTableTagsSuspense<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof getTableTags>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useGetTableTagsSuspense<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof getTableTags>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary Get Table Tags
+ */
+
+export function useGetTableTagsSuspense<
+  TData = Awaited<ReturnType<typeof getTableTags>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  table: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof getTableTags>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getGetTableTagsSuspenseQueryOptions(
+    catalog,
+    schema,
+    table,
+    options,
+  );
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+/**
  * Generate data quality checks from natural language using AI-assisted generation.
  * @summary Ai Generate Checks
  */
@@ -3724,7 +5088,7 @@ export function useListRulesSuspense<
 }
 
 /**
- * Save (upsert) a rule set for a table.
+ * Save (upsert) a rule set for a table (Rule Author and above).
  * @summary Save Rules
  */
 export const saveRules = (
@@ -4079,7 +5443,7 @@ export function useGetRulesSuspense<
 }
 
 /**
- * Delete the rule set for a table.
+ * Delete the rule set for a table (Rule Author and above).
  * @summary Delete Rules
  */
 export const deleteRules = (
@@ -4162,7 +5526,7 @@ export const useDeleteRules = <
 };
 
 /**
- * Submit a rule set for approval.
+ * Submit a rule set for approval (Rule Author and above).
  * @summary Submit For Approval
  */
 export const submitRulesForApproval = (
@@ -4251,7 +5615,7 @@ export const useSubmitRulesForApproval = <
 };
 
 /**
- * Approve a rule set (admin only).
+ * Approve a rule set (Rule Approver and Admin only).
  * @summary Approve Rules
  */
 export const approveRules = (
@@ -4339,7 +5703,7 @@ export const useApproveRules = <
 };
 
 /**
- * Reject a rule set (admin only).
+ * Reject a rule set (Rule Approver and Admin only).
  * @summary Reject Rules
  */
 export const rejectRules = (

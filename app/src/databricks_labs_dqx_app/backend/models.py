@@ -183,7 +183,45 @@ class ColumnOut(BaseModel):
 class UserRoleOut(BaseModel):
     email: str
     role: str
+    permissions: list[str] = Field(default_factory=list, description="List of permissions granted to this role")
 
 
 class InstallationSettings(BaseModel):
     install_folder: str
+
+
+# ---------------------------------------------------------------------------
+# Role management models
+# ---------------------------------------------------------------------------
+
+
+class RoleMappingOut(BaseModel):
+    role: str = Field(description="Role name (admin, rule_approver, rule_author, viewer)")
+    group_name: str = Field(description="Databricks workspace group name")
+    created_by: str | None = None
+    created_at: str | None = None
+    updated_by: str | None = None
+    updated_at: str | None = None
+
+
+class CreateRoleMappingIn(BaseModel):
+    role: str = Field(description="Role name (admin, rule_approver, rule_author, viewer)")
+    group_name: str = Field(description="Databricks workspace group name")
+
+
+class GroupOut(BaseModel):
+    display_name: str = Field(description="Group display name")
+    id: str | None = Field(default=None, description="Group ID")
+
+
+# ---------------------------------------------------------------------------
+# Unity Catalog tags models
+# ---------------------------------------------------------------------------
+
+
+class TableTagsOut(BaseModel):
+    table_fqn: str = Field(description="Fully qualified table name")
+    table_tags: list[str] = Field(default_factory=list, description="Tags assigned to the table")
+    column_tags: dict[str, list[str]] = Field(
+        default_factory=dict, description="Column name to list of tags mapping"
+    )

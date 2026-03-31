@@ -140,6 +140,25 @@ MIGRATIONS: list[Migration] = [
         description="Liquid cluster dq_app_settings by setting_key",
         sql_template=(f"ALTER TABLE {_PLACEHOLDER}.dq_app_settings " "CLUSTER BY (setting_key)"),
     ),
+    Migration(
+        version=9,
+        description="Create dq_role_mappings table for RBAC",
+        sql_template=(
+            f"CREATE TABLE IF NOT EXISTS {_PLACEHOLDER}.dq_role_mappings ("
+            "  role STRING NOT NULL,"
+            "  group_name STRING NOT NULL,"
+            "  created_by STRING,"
+            "  created_at TIMESTAMP,"
+            "  updated_by STRING,"
+            "  updated_at TIMESTAMP"
+            ")"
+        ),
+    ),
+    Migration(
+        version=10,
+        description="Liquid cluster dq_role_mappings by role",
+        sql_template=(f"ALTER TABLE {_PLACEHOLDER}.dq_role_mappings " "CLUSTER BY (role)"),
+    ),
 ]
 
 # ---------------------------------------------------------------------------

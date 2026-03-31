@@ -3,12 +3,18 @@ from typing import Annotated
 from databricks.sdk import WorkspaceClient
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from databricks_labs_dqx_app.backend.dependencies import get_obo_ws, get_rules_catalog_service
+from databricks_labs_dqx_app.backend.common.authorization import UserRole
+from databricks_labs_dqx_app.backend.dependencies import get_obo_ws, get_rules_catalog_service, require_role
 from databricks_labs_dqx_app.backend.logger import logger
 from databricks_labs_dqx_app.backend.models import RuleCatalogEntryOut, SaveRulesIn, SetStatusIn
 from databricks_labs_dqx_app.backend.services.rules_catalog_service import RulesCatalogService
 
 router = APIRouter()
+
+# Role shortcuts for readability
+_ALL_ROLES = [UserRole.ADMIN, UserRole.RULE_APPROVER, UserRole.RULE_AUTHOR, UserRole.VIEWER]
+_AUTHORS_AND_ABOVE = [UserRole.ADMIN, UserRole.RULE_APPROVER, UserRole.RULE_AUTHOR]
+_APPROVERS_ONLY = [UserRole.ADMIN, UserRole.RULE_APPROVER]
 
 
 def _entry_to_out(entry) -> RuleCatalogEntryOut:
@@ -24,7 +30,12 @@ def _entry_to_out(entry) -> RuleCatalogEntryOut:
     )
 
 
-@router.get("", response_model=list[RuleCatalogEntryOut], operation_id="listRules")
+@router.get(
+    "",
+    response_model=list[RuleCatalogEntryOut],
+    operation_id="listRules",
+    dependencies=[require_role(*_ALL_ROLES)],
+)
 def list_rules(
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     status: Annotated[str | None, Query(description="Filter by status")] = None,
@@ -38,7 +49,12 @@ def list_rules(
         raise HTTPException(status_code=500, detail=f"Failed to list rules: {e}")
 
 
-@router.get("/{table_fqn:path}", response_model=RuleCatalogEntryOut, operation_id="getRules")
+@router.get(
+    "/{table_fqn:path}",
+    response_model=RuleCatalogEntryOut,
+    operation_id="getRules",
+    dependencies=[require_role(*_ALL_ROLES)],
+)
 def get_rules(
     table_fqn: str,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
@@ -56,13 +72,18 @@ def get_rules(
         raise HTTPException(status_code=500, detail=f"Failed to get rules: {e}")
 
 
-@router.post("", response_model=RuleCatalogEntryOut, operation_id="saveRules")
+@router.post(
+    "",
+    response_model=RuleCatalogEntryOut,
+    operation_id="saveRules",
+    dependencies=[require_role(*_AUTHORS_AND_ABOVE)],
+)
 def save_rules(
     body: SaveRulesIn,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
 ) -> RuleCatalogEntryOut:
-    """Save (upsert) a rule set for a table."""
+    """Save (upsert) a rule set for a table (Rule Author and above)."""
     try:
         user = obo_ws.current_user.me()
         user_email = user.user_name or "unknown"
@@ -73,13 +94,17 @@ def save_rules(
         raise HTTPException(status_code=500, detail=f"Failed to save rules: {e}")
 
 
-@router.delete("/{table_fqn:path}", operation_id="deleteRules")
+@router.delete(
+    "/{table_fqn:path}",
+    operation_id="deleteRules",
+    dependencies=[require_role(*_AUTHORS_AND_ABOVE)],
+)
 def delete_rules(
     table_fqn: str,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
 ) -> dict[str, str]:
-    """Delete the rule set for a table."""
+    """Delete the rule set for a table (Rule Author and above)."""
     try:
         user = obo_ws.current_user.me()
         user_email = user.user_name or "unknown"
@@ -90,14 +115,19 @@ def delete_rules(
         raise HTTPException(status_code=500, detail=f"Failed to delete rules: {e}")
 
 
-@router.post("/{table_fqn:path}/submit", response_model=RuleCatalogEntryOut, operation_id="submitRulesForApproval")
+@router.post(
+    "/{table_fqn:path}/submit",
+    response_model=RuleCatalogEntryOut,
+    operation_id="submitRulesForApproval",
+    dependencies=[require_role(*_AUTHORS_AND_ABOVE)],
+)
 def submit_for_approval(
     table_fqn: str,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
     body: SetStatusIn | None = None,
 ) -> RuleCatalogEntryOut:
-    """Submit a rule set for approval."""
+    """Submit a rule set for approval (Rule Author and above)."""
     try:
         user = obo_ws.current_user.me()
         user_email = user.user_name or "unknown"
@@ -113,14 +143,19 @@ def submit_for_approval(
         raise HTTPException(status_code=500, detail=f"Failed to submit for approval: {e}")
 
 
-@router.post("/{table_fqn:path}/approve", response_model=RuleCatalogEntryOut, operation_id="approveRules")
+@router.post(
+    "/{table_fqn:path}/approve",
+    response_model=RuleCatalogEntryOut,
+    operation_id="approveRules",
+    dependencies=[require_role(*_APPROVERS_ONLY)],
+)
 def approve_rules(
     table_fqn: str,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
     body: SetStatusIn | None = None,
 ) -> RuleCatalogEntryOut:
-    """Approve a rule set (admin only)."""
+    """Approve a rule set (Rule Approver and Admin only)."""
     try:
         user = obo_ws.current_user.me()
         user_email = user.user_name or "unknown"
@@ -136,14 +171,19 @@ def approve_rules(
         raise HTTPException(status_code=500, detail=f"Failed to approve rules: {e}")
 
 
-@router.post("/{table_fqn:path}/reject", response_model=RuleCatalogEntryOut, operation_id="rejectRules")
+@router.post(
+    "/{table_fqn:path}/reject",
+    response_model=RuleCatalogEntryOut,
+    operation_id="rejectRules",
+    dependencies=[require_role(*_APPROVERS_ONLY)],
+)
 def reject_rules(
     table_fqn: str,
     svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
     obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
     body: SetStatusIn | None = None,
 ) -> RuleCatalogEntryOut:
-    """Reject a rule set (admin only)."""
+    """Reject a rule set (Rule Approver and Admin only)."""
     try:
         user = obo_ws.current_user.me()
         user_email = user.user_name or "unknown"

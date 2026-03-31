@@ -8,10 +8,12 @@ from .rules import router as rules_router
 from .dryrun import router as dryrun_router
 from .profiler import router as profiler_router
 from .settings import router as settings_router
+from .roles import router as roles_router
 
 v1_router = APIRouter()
 v1_router.include_router(me_router, tags=["meta"])
 v1_router.include_router(config_router, prefix="/config", tags=["config"])
+v1_router.include_router(roles_router, prefix="/roles", tags=["roles"])
 v1_router.include_router(discovery_router, prefix="/discovery", tags=["discovery"])
 v1_router.include_router(generate_router, prefix="/ai", tags=["ai"])
 v1_router.include_router(rules_router, prefix="/rules", tags=["rules"])

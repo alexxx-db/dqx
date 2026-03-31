@@ -45,6 +45,7 @@ import {
   useGetProfileRunResults,
   useSaveRules,
   useGetTableColumns,
+  useGetRules,
   getProfileRunStatus,
   type ProfileResultsOut,
   type ProfileRunSummaryOut,
@@ -591,20 +592,95 @@ function ProfileResults({
 }) {
   const saveRules = useSaveRules();
   const [added, setAdded] = useState(false);
+  const [selectedRules, setSelectedRules] = useState<Set<number>>(new Set());
+  const [criticalityFilter, setCriticalityFilter] = useState<"all" | "error" | "warn">("all");
+
+  // Fetch existing rules for this table to highlight already-added rules
+  const { data: existingRulesResp } = useGetRules(tableFqn, {
+    query: { enabled: !!tableFqn },
+  });
+  const existingChecks = existingRulesResp?.data?.checks ?? [];
+
+  // Create a set of existing rule signatures for fast lookup
+  const existingRuleSignatures = new Set(
+    existingChecks.map((check) => {
+      const checkObj = (check.check as Record<string, unknown>) ?? check;
+      const args = (checkObj.arguments as Record<string, unknown>) ?? {};
+      const fn = String(checkObj.function ?? "");
+      const col = String(args.column ?? checkObj.for_each_column ?? "");
+      return `${fn}::${col}`;
+    })
+  );
+
+  const allRules = results.generated_rules ?? [];
+
+  // Check if a generated rule already exists
+  const isRuleExisting = (rule: Record<string, unknown>): boolean => {
+    const check = (rule.check as Record<string, unknown>) ?? {};
+    const args = (check.arguments as Record<string, unknown>) ?? {};
+    const fn = String(check.function ?? "");
+    const col = String(args.column ?? check.for_each_column ?? "");
+    return existingRuleSignatures.has(`${fn}::${col}`);
+  };
+
+  const filteredIndices = allRules
+    .map((rule, idx) => ({ rule, idx }))
+    .filter(({ rule }) => {
+      if (criticalityFilter === "all") return true;
+      return String(rule.criticality ?? "warn") === criticalityFilter;
+    })
+    .map(({ idx }) => idx);
+
+  // For select all, only select rules that don't already exist
+  const handleSelectAll = () => {
+    const newRuleIndices = filteredIndices.filter(
+      (idx) => !isRuleExisting(allRules[idx] as Record<string, unknown>)
+    );
+    setSelectedRules(new Set(newRuleIndices));
+  };
+
+  const handleSelectNone = () => {
+    setSelectedRules(new Set());
+  };
+
+  const toggleRule = (idx: number) => {
+    // Don't allow selecting already existing rules
+    if (isRuleExisting(allRules[idx] as Record<string, unknown>)) return;
+    
+    setSelectedRules((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
 
   const handleAddToRules = async () => {
-    const rules = results.generated_rules ?? [];
-    if (!tableFqn || !rules.length) return;
+    if (!tableFqn || selectedRules.size === 0) return;
+    const rulesToAdd = allRules.filter((_, idx) => selectedRules.has(idx));
     try {
       await saveRules.mutateAsync({
-        data: { table_fqn: tableFqn, checks: rules },
+        data: { table_fqn: tableFqn, checks: rulesToAdd },
       });
       setAdded(true);
-      toast.success(`${rules.length} rules added for ${tableFqn}`);
+      toast.success(`${rulesToAdd.length} rules added for ${tableFqn}`);
     } catch {
       toast.error("Failed to add rules");
     }
   };
+
+  const selectedCount = selectedRules.size;
+  const existingCount = allRules.filter((rule) => 
+    isRuleExisting(rule as Record<string, unknown>)
+  ).length;
+  const newRulesCount = allRules.length - existingCount;
+  const allFilteredSelected = filteredIndices.length > 0 && 
+    filteredIndices
+      .filter((idx) => !isRuleExisting(allRules[idx] as Record<string, unknown>))
+      .every((idx) => selectedRules.has(idx));
 
   return (
     <div className="space-y-4">
@@ -629,19 +705,19 @@ function ProfileResults({
         </div>
       </div>
 
-      {(results.generated_rules?.length ?? 0) > 0 && (
+      {allRules.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
-              Generated Rules ({(results.generated_rules ?? []).length})
+              Generated Rules ({allRules.length})
             </h4>
             <Button
               size="sm"
               variant={added ? "outline" : "default"}
               className="gap-1.5"
               onClick={handleAddToRules}
-              disabled={saveRules.isPending || added}
+              disabled={saveRules.isPending || added || selectedCount === 0}
             >
               {saveRules.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -650,35 +726,140 @@ function ProfileResults({
               ) : (
                 <Plus className="h-3.5 w-3.5" />
               )}
-              {added ? "Added to Rules" : "Add to Rules"}
+              {added ? "Added to Rules" : `Add ${selectedCount} Selected`}
             </Button>
           </div>
+
+          {/* Filter and selection controls */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 border rounded-md p-0.5">
+              <button
+                type="button"
+                onClick={() => setCriticalityFilter("all")}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  criticalityFilter === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setCriticalityFilter("error")}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  criticalityFilter === "error"
+                    ? "bg-destructive text-destructive-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                Error
+              </button>
+              <button
+                type="button"
+                onClick={() => setCriticalityFilter("warn")}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  criticalityFilter === "warn"
+                    ? "bg-yellow-500 text-white"
+                    : "hover:bg-muted"
+                }`}
+              >
+                Warning
+              </button>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleSelectAll}
+                disabled={added || allFilteredSelected || newRulesCount === 0}
+              >
+                Select All
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleSelectNone}
+                disabled={added || selectedCount === 0}
+              >
+                Select None
+              </Button>
+            </div>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {selectedCount} of {newRulesCount} new selected
+              {existingCount > 0 && (
+                <span className="ml-1 text-green-600">
+                  ({existingCount} already in catalog)
+                </span>
+              )}
+            </span>
+          </div>
+
           <div className="border rounded-lg overflow-hidden">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/50">
+                  <th className="w-8 p-2"></th>
                   <th className="text-left p-2 font-medium">Function</th>
                   <th className="text-left p-2 font-medium">Column</th>
                   <th className="text-left p-2 font-medium">Criticality</th>
                 </tr>
               </thead>
               <tbody>
-                {(results.generated_rules ?? []).map((rule, idx) => {
+                {allRules.map((rule, idx) => {
                   const check = (rule.check as Record<string, unknown>) ?? {};
                   const args = (check.arguments as Record<string, unknown>) ?? {};
+                  const criticality = String(rule.criticality ?? "warn");
+                  const isVisible =
+                    criticalityFilter === "all" || criticality === criticalityFilter;
+                  const ruleExists = isRuleExisting(rule as Record<string, unknown>);
+
+                  if (!isVisible) return null;
+
                   return (
-                    <tr key={idx} className="border-b last:border-b-0">
-                      <td className="p-2 font-mono">{String(check.function ?? "—")}</td>
+                    <tr
+                      key={idx}
+                      className={`border-b last:border-b-0 transition-colors ${
+                        ruleExists
+                          ? "bg-green-500/10 opacity-60"
+                          : selectedRules.has(idx)
+                            ? "bg-primary/10 cursor-pointer"
+                            : "hover:bg-muted/50 cursor-pointer"
+                      }`}
+                      onClick={() => !added && !ruleExists && toggleRule(idx)}
+                    >
+                      <td className="p-2 text-center">
+                        {ruleExists ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600 mx-auto" />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={selectedRules.has(idx)}
+                            onChange={() => toggleRule(idx)}
+                            disabled={added}
+                            className="h-3.5 w-3.5 rounded border-gray-300 cursor-pointer"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                      </td>
+                      <td className="p-2 font-mono">
+                        {String(check.function ?? "—")}
+                        {ruleExists && (
+                          <Badge variant="outline" className="ml-2 text-[10px] py-0 px-1 text-green-600 border-green-600">
+                            Added
+                          </Badge>
+                        )}
+                      </td>
                       <td className="p-2">
                         {String(args.column ?? check.for_each_column ?? "—")}
                       </td>
                       <td className="p-2">
                         <Badge
-                          variant={
-                            String(rule.criticality) === "error" ? "destructive" : "secondary"
-                          }
+                          variant={criticality === "error" ? "destructive" : "secondary"}
                         >
-                          {String(rule.criticality ?? "warn")}
+                          {criticality}
                         </Badge>
                       </td>
                     </tr>
@@ -690,7 +871,7 @@ function ProfileResults({
         </div>
       )}
 
-      {(results.generated_rules?.length ?? 0) === 0 && (
+      {allRules.length === 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <AlertTriangle className="h-4 w-4" />
           No rules were generated from the profiling data.
