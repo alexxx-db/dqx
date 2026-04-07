@@ -175,6 +175,50 @@ class JobService:
         ]
         return [dict(zip(columns, row)) for row in resp.result.data_array]
 
+    def list_dryrun_rows(self, table: str, limit: int = 100) -> list[dict[str, str | None]]:
+        """Read the most recent dry-run result rows from dq_validation_runs, newest first.
+
+        Deduplicates by run_id — if both a RUNNING placeholder and a terminal
+        row (SUCCESS / FAILED) exist for the same run_id, only the terminal row
+        is returned.
+        """
+        from databricks.sdk.service.sql import Disposition, Format, StatementState
+
+        sql = (
+            f"SELECT run_id, requesting_user, source_table_fqn, sample_size, "  # noqa: S608
+            f"total_rows, valid_rows, invalid_rows, "
+            f"status, error_message, created_at "
+            f"FROM ("
+            f"  SELECT *, ROW_NUMBER() OVER ("
+            f"    PARTITION BY run_id "
+            f"    ORDER BY CASE WHEN status = 'RUNNING' THEN 1 ELSE 0 END ASC, created_at DESC"
+            f"  ) AS rn "
+            f"  FROM {table}"
+            f") WHERE rn = 1 "
+            f"ORDER BY created_at DESC LIMIT {limit}"
+        )
+        resp = self._ws.statement_execution.execute_statement(
+            warehouse_id=self._warehouse_id,
+            statement=sql,
+            catalog=self._catalog,
+            schema=self._schema,
+            disposition=Disposition.INLINE,
+            format=Format.JSON_ARRAY,
+        )
+
+        if resp.status and resp.status.state == StatementState.FAILED:
+            msg = resp.status.error.message if resp.status.error else "Unknown error"
+            raise RuntimeError(f"List query failed: {msg}")
+
+        if not resp.result or not resp.result.data_array:
+            return []
+
+        columns = [
+            col.name or ""
+            for col in ((resp.manifest.schema.columns if resp.manifest and resp.manifest.schema else None) or [])
+        ]
+        return [dict(zip(columns, row)) for row in resp.result.data_array]
+
     def get_run_result_row(self, table: str, run_id: str) -> dict[str, str | None] | None:
         """Read a result row from a Delta table by run_id.
 

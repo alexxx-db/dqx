@@ -592,6 +592,32 @@ export interface ValidationError {
   type: string;
 }
 
+export type ValidationRunSummaryOutStatus = string | null;
+
+export type ValidationRunSummaryOutRequestingUser = string | null;
+
+export type ValidationRunSummaryOutSampleSize = number | null;
+
+export type ValidationRunSummaryOutTotalRows = number | null;
+
+export type ValidationRunSummaryOutValidRows = number | null;
+
+export type ValidationRunSummaryOutInvalidRows = number | null;
+
+export type ValidationRunSummaryOutCreatedAt = string | null;
+
+export interface ValidationRunSummaryOut {
+  run_id: string;
+  source_table_fqn: string;
+  status?: ValidationRunSummaryOutStatus;
+  requesting_user?: ValidationRunSummaryOutRequestingUser;
+  sample_size?: ValidationRunSummaryOutSampleSize;
+  total_rows?: ValidationRunSummaryOutTotalRows;
+  valid_rows?: ValidationRunSummaryOutValidRows;
+  invalid_rows?: ValidationRunSummaryOutInvalidRows;
+  created_at?: ValidationRunSummaryOutCreatedAt;
+}
+
 export interface VersionOut {
   version: string;
 }
@@ -6249,6 +6275,280 @@ export const useRejectRules = <
 
   return useMutation(mutationOptions, queryClient);
 };
+
+/**
+ * Return validation (dry-run) history, newest first.
+ * @summary List Validation Runs
+ */
+export const listValidationRuns = (
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<ValidationRunSummaryOut[]>> => {
+  return axios.default.get(`/api/v1/dryrun/runs`, options);
+};
+
+export const getListValidationRunsQueryKey = () => {
+  return [`/api/v1/dryrun/runs`] as const;
+};
+
+export const getListValidationRunsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof listValidationRuns>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListValidationRunsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listValidationRuns>>
+  > = ({ signal }) => listValidationRuns({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listValidationRuns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListValidationRunsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listValidationRuns>>
+>;
+export type ListValidationRunsQueryError = AxiosError<unknown>;
+
+export function useListValidationRuns<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listValidationRuns>>,
+          TError,
+          Awaited<ReturnType<typeof listValidationRuns>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListValidationRuns<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listValidationRuns>>,
+          TError,
+          Awaited<ReturnType<typeof listValidationRuns>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListValidationRuns<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Validation Runs
+ */
+
+export function useListValidationRuns<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListValidationRunsQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getListValidationRunsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(options?: {
+  query?: Partial<
+    UseSuspenseQueryOptions<
+      Awaited<ReturnType<typeof listValidationRuns>>,
+      TError,
+      TData
+    >
+  >;
+  axios?: AxiosRequestConfig;
+}) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListValidationRunsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listValidationRuns>>
+  > = ({ signal }) => listValidationRuns({ signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof listValidationRuns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListValidationRunsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listValidationRuns>>
+>;
+export type ListValidationRunsSuspenseQueryError = AxiosError<unknown>;
+
+export function useListValidationRunsSuspense<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListValidationRunsSuspense<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListValidationRunsSuspense<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Validation Runs
+ */
+
+export function useListValidationRunsSuspense<
+  TData = Awaited<ReturnType<typeof listValidationRuns>>,
+  TError = AxiosError<unknown>,
+>(
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listValidationRuns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListValidationRunsSuspenseQueryOptions(options);
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
 
 /**
  * Validate checks, create a temporary view (OBO), and submit a dry-run job (SP).

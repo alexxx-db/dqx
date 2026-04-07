@@ -23,11 +23,40 @@ from databricks_labs_dqx_app.backend.models import (
     DryRunResultsOut,
     DryRunSubmitOut,
     RunStatusOut,
+    ValidationRunSummaryOut,
 )
 from databricks_labs_dqx_app.backend.services.job_service import JobService
 from databricks_labs_dqx_app.backend.services.view_service import ViewService
 
 router = APIRouter()
+
+
+@router.get("/runs", response_model=list[ValidationRunSummaryOut], operation_id="listValidationRuns")
+def list_validation_runs(
+    job_svc: Annotated[JobService, Depends(get_job_service)],
+    app_conf: Annotated[AppConfig, Depends(get_conf)],
+) -> list[ValidationRunSummaryOut]:
+    """Return validation (dry-run) history, newest first."""
+    try:
+        table = f"{app_conf.catalog}.{app_conf.schema_name}.dq_validation_runs"
+        rows = job_svc.list_dryrun_rows(table)
+        return [
+            ValidationRunSummaryOut(
+                run_id=row.get("run_id") or "",
+                source_table_fqn=row.get("source_table_fqn") or "",
+                status=row.get("status"),
+                requesting_user=row.get("requesting_user"),
+                sample_size=int(v) if (v := row.get("sample_size")) else None,
+                total_rows=int(v) if (v := row.get("total_rows")) else None,
+                valid_rows=int(v) if (v := row.get("valid_rows")) else None,
+                invalid_rows=int(v) if (v := row.get("invalid_rows")) else None,
+                created_at=row.get("created_at"),
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        logger.error("Failed to list validation runs: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list validation runs: {e}")
 
 
 @router.post("", response_model=DryRunSubmitOut, operation_id="submitDryRun")

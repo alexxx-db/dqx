@@ -182,6 +182,18 @@ class DryRunResultsOut(BaseModel):
     sample_invalid: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ValidationRunSummaryOut(BaseModel):
+    run_id: str
+    source_table_fqn: str
+    status: str | None = None
+    requesting_user: str | None = None
+    sample_size: int | None = None
+    total_rows: int | None = None
+    valid_rows: int | None = None
+    invalid_rows: int | None = None
+    created_at: str | None = None
+
+
 class CatalogOut(BaseModel):
     name: str
     comment: str | None = None
