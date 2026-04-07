@@ -71,7 +71,7 @@ def submit_dry_run(
             requesting_user=requesting_user,
         )
 
-        return DryRunSubmitOut(run_id=run_id, job_run_id=job_run_id)
+        return DryRunSubmitOut(run_id=run_id, job_run_id=job_run_id, view_fqn=view_fqn)
     except HTTPException:
         raise
     except Exception as e:
@@ -84,15 +84,29 @@ def get_dry_run_status(
     run_id: str,
     job_run_id: int,
     job_svc: Annotated[JobService, Depends(get_job_service)],
+    view_svc: Annotated[ViewService, Depends(get_view_service)],
+    view_fqn: str | None = None,
 ) -> RunStatusOut:
-    """Poll the status of a dry-run job."""
+    """Poll the status of a dry-run job. Cleans up the view when job terminates."""
     try:
         status = job_svc.get_run_status(job_run_id)
+        view_cleaned_up = False
+
+        # Clean up the view when job is done (TERMINATED state with any result)
+        if view_fqn and status.state == "TERMINATED":
+            try:
+                view_svc.drop_view(view_fqn)
+                view_cleaned_up = True
+                logger.info("Cleaned up temporary view: %s", view_fqn)
+            except Exception as cleanup_err:
+                logger.warning("Failed to clean up view %s: %s", view_fqn, cleanup_err)
+
         return RunStatusOut(
             run_id=run_id,
             state=status.state,
             result_state=status.result_state,
             message=status.message,
+            view_cleaned_up=view_cleaned_up,
         )
     except Exception as e:
         logger.error("Failed to get dry run status (run_id=%s): %s", run_id, e, exc_info=True)

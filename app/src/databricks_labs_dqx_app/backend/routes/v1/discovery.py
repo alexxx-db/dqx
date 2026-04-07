@@ -69,6 +69,25 @@ async def list_tables(
 
 
 @router.get(
+    "/catalogs/{catalog}/schemas/{schema}/all-table-fqns",
+    response_model=list[str],
+    operation_id="list_all_table_fqns",
+)
+async def list_all_table_fqns(
+    catalog: str,
+    schema: str,
+    discovery: Annotated[DiscoveryService, Depends(get_discovery_service)],
+) -> list[str]:
+    """Return fully qualified names for all tables in a schema (for batch profiling)."""
+    try:
+        tables = await discovery.list_tables_async(catalog, schema)
+        return [f"{catalog}.{schema}.{t.name}" for t in tables if t.name]
+    except Exception as e:
+        logger.error(f"Failed to list table FQNs in {catalog}.{schema}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list table FQNs: {e}")
+
+
+@router.get(
     "/catalogs/{catalog}/schemas/{schema}/tables/{table}/columns",
     response_model=list[ColumnOut],
     operation_id="get_table_columns",

@@ -87,14 +87,72 @@ class JobService:
             message=state.state_message if state else None,
         )
 
+    def record_run_started(
+        self,
+        table: str,
+        run_id: str,
+        requesting_user: str,
+        source_table_fqn: str,
+        view_fqn: str,
+        sample_limit: int,
+    ) -> None:
+        """Insert a RUNNING placeholder row so in-flight jobs appear in run history.
+
+        Non-fatal: if the insert fails (e.g. cold warehouse) the job still runs.
+        """
+        from databricks.sdk.service.sql import Disposition, Format, StatementState
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).isoformat()
+        er = run_id.replace("'", "''")
+        eu = requesting_user.replace("'", "''")
+        ef = source_table_fqn.replace("'", "''")
+        ev = view_fqn.replace("'", "''")
+
+        sql = (
+            f"INSERT INTO {table} "
+            "(run_id, requesting_user, source_table_fqn, view_fqn, sample_limit, status, created_at) "
+            f"VALUES ('{er}', '{eu}', '{ef}', '{ev}', {sample_limit}, 'RUNNING', '{now}')"
+        )
+        try:
+            resp = self._ws.statement_execution.execute_statement(
+                warehouse_id=self._warehouse_id,
+                statement=sql,
+                catalog=self._catalog,
+                schema=self._schema,
+                disposition=Disposition.INLINE,
+                format=Format.JSON_ARRAY,
+            )
+            if resp.status and resp.status.state == StatementState.FAILED:
+                msg = resp.status.error.message if resp.status.error else "Unknown error"
+                logger.warning("Failed to record run started for %s: %s", run_id, msg)
+        except Exception as exc:
+            logger.warning("Failed to record run started for %s: %s", run_id, exc)
+
     def list_run_rows(self, table: str, limit: int = 100) -> list[dict[str, str | None]]:
         """Read the most recent result rows from a Delta table, newest first.
+
+        Deduplicates by run_id — if both a RUNNING placeholder and a terminal
+        row (SUCCESS / FAILED) exist for the same run_id, only the terminal row
+        is returned.
 
         Returns a list of dicts keyed by column name.
         """
         from databricks.sdk.service.sql import Disposition, Format, StatementState
 
-        sql = f"SELECT * FROM {table} ORDER BY created_at DESC LIMIT {limit}"  # noqa: S608
+        sql = (
+            f"SELECT run_id, requesting_user, source_table_fqn, view_fqn, sample_limit, "  # noqa: S608
+            f"rows_profiled, columns_profiled, duration_seconds, summary_json, "
+            f"generated_rules_json, status, error_message, created_at "
+            f"FROM ("
+            f"  SELECT *, ROW_NUMBER() OVER ("
+            f"    PARTITION BY run_id "
+            f"    ORDER BY CASE WHEN status = 'RUNNING' THEN 1 ELSE 0 END ASC, created_at DESC"
+            f"  ) AS rn "
+            f"  FROM {table}"
+            f") WHERE rn = 1 "
+            f"ORDER BY created_at DESC LIMIT {limit}"
+        )
         resp = self._ws.statement_execution.execute_statement(
             warehouse_id=self._warehouse_id,
             statement=sql,
@@ -125,7 +183,8 @@ class JobService:
         """
         from databricks.sdk.service.sql import Disposition, Format, StatementState
 
-        sql = f"SELECT * FROM {table} WHERE run_id = '{run_id}' LIMIT 1"  # noqa: S608
+        # Exclude RUNNING placeholder rows — only return terminal (SUCCESS/FAILED) rows
+        sql = f"SELECT * FROM {table} WHERE run_id = '{run_id}' AND status != 'RUNNING' LIMIT 1"  # noqa: S608
         resp = self._ws.statement_execution.execute_statement(
             warehouse_id=self._warehouse_id,
             statement=sql,

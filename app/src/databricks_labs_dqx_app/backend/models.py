@@ -65,6 +65,19 @@ class SaveRulesIn(BaseModel):
     checks: list[dict[str, Any]] = Field(description="List of check metadata dictionaries")
 
 
+class BatchSaveRulesIn(BaseModel):
+    table_fqns: list[str] = Field(description="Fully qualified table names to apply the checks to")
+    checks: list[dict[str, Any]] = Field(description="List of check metadata dictionaries")
+
+
+class BatchSaveRulesOut(BaseModel):
+    saved: list[RuleCatalogEntryOut] = Field(description="Successfully saved rule sets")
+    failed: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Tables that failed: [{table_fqn, error}]",
+    )
+
+
 class SetStatusIn(BaseModel):
     status: str = Field(description="New status: draft | pending_approval | approved | rejected")
     expected_version: int | None = Field(
@@ -82,6 +95,7 @@ class DryRunIn(BaseModel):
 class DryRunSubmitOut(BaseModel):
     run_id: str
     job_run_id: int
+    view_fqn: str = Field(description="Temporary view FQN for cleanup tracking")
 
 
 class DryRunOut(BaseModel):
@@ -113,6 +127,7 @@ class ProfileRunIn(BaseModel):
 class ProfileRunOut(BaseModel):
     run_id: str
     job_run_id: int
+    view_fqn: str = Field(description="Temporary view FQN for cleanup tracking")
 
 
 class RunStatusOut(BaseModel):
@@ -120,6 +135,7 @@ class RunStatusOut(BaseModel):
     state: str  # PENDING, RUNNING, TERMINATED, etc.
     result_state: str | None = None  # SUCCESS, FAILED, etc.
     message: str | None = None
+    view_cleaned_up: bool = Field(default=False, description="Whether the temporary view was cleaned up")
 
 
 class ProfileResultsOut(BaseModel):
@@ -141,6 +157,19 @@ class ProfileRunSummaryOut(BaseModel):
     duration_seconds: float | None = None
     requesting_user: str | None = None
     created_at: str | None = None
+
+
+class BatchProfileRunIn(BaseModel):
+    table_fqns: list[str] = Field(description="List of fully qualified table names to profile")
+    sample_limit: int = Field(default=50_000, le=100_000, description="Max rows to sample per table")
+    profile_options: dict[str, Any] | None = Field(
+        default=None,
+        description="Advanced profiler options applied to all tables",
+    )
+
+
+class BatchProfileRunOut(BaseModel):
+    runs: list[ProfileRunOut] = Field(description="One entry per table with run_id, job_run_id, view_fqn")
 
 
 class DryRunResultsOut(BaseModel):

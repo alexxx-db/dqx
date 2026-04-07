@@ -17,7 +17,7 @@ import json
 import logging
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
@@ -25,6 +25,22 @@ from pyspark.sql import SparkSession
 
 logger = logging.getLogger("dqx_task_runner")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects."""
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, date):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def _json_dumps(obj: Any) -> str:
+    """Serialize object to JSON, handling datetime objects."""
+    return json.dumps(obj, cls=DateTimeEncoder)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -37,6 +53,28 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--run_id", required=True, help="App-generated run ID for tracking")
     parser.add_argument("--requesting_user", default="unknown", help="Email of the requesting user")
     return parser.parse_args()
+
+
+def _read_view_with_retry(spark: SparkSession, view_fqn: str, max_retries: int = 5, delay: float = 2.0):
+    """Read a view with retries to handle Unity Catalog metadata propagation delays."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            df = spark.table(view_fqn)
+            # Force schema resolution to verify the view is accessible
+            _ = df.schema
+            return df
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                logger.warning(
+                    "View %s not accessible (attempt %d/%d), retrying in %.1fs: %s",
+                    view_fqn, attempt + 1, max_retries, delay, e
+                )
+                time.sleep(delay)
+            else:
+                logger.error("View %s not accessible after %d attempts", view_fqn, max_retries)
+    raise last_error  # type: ignore[misc]
 
 
 def _run_profile(
@@ -61,7 +99,7 @@ def _run_profile(
 
     start = time.time()
 
-    df = spark.table(view_fqn)
+    df = _read_view_with_retry(spark, view_fqn)
     if sample_limit:
         df = df.limit(sample_limit)
 
@@ -88,8 +126,8 @@ def _run_profile(
                 rows_profiled,
                 columns_profiled,
                 duration,
-                json.dumps(summary) if summary else "{}",
-                json.dumps(rules) if rules else "[]",
+                _json_dumps(summary) if summary else "{}",
+                _json_dumps(rules) if rules else "[]",
                 "SUCCESS",
                 None,
                 now,
@@ -124,7 +162,7 @@ def _run_dryrun(
     source_table_fqn = config.get("source_table_fqn", "")
     result_table = f"{result_catalog}.{result_schema}.dq_validation_runs"
 
-    df = spark.table(view_fqn).limit(sample_size)
+    df = _read_view_with_retry(spark, view_fqn).limit(sample_size)
 
     engine = DQEngine(workspace_client=ws, spark=spark)
     result = engine.apply_checks_by_metadata_and_split(df, checks)
@@ -157,13 +195,13 @@ def _run_dryrun(
                 requesting_user,
                 source_table_fqn,
                 view_fqn,
-                json.dumps(checks),
+                _json_dumps(checks),
                 sample_size,
                 total_rows,
                 valid_rows,
                 invalid_rows,
-                json.dumps(error_summary),
-                json.dumps(sample_invalid),
+                _json_dumps(error_summary),
+                _json_dumps(sample_invalid),
                 "SUCCESS",
                 None,
                 now,

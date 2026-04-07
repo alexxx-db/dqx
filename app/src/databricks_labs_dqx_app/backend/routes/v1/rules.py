@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from databricks_labs_dqx_app.backend.common.authorization import UserRole
 from databricks_labs_dqx_app.backend.dependencies import get_obo_ws, get_rules_catalog_service, require_role
 from databricks_labs_dqx_app.backend.logger import logger
-from databricks_labs_dqx_app.backend.models import RuleCatalogEntryOut, SaveRulesIn, SetStatusIn
+from databricks_labs_dqx_app.backend.models import (
+    BatchSaveRulesIn,
+    BatchSaveRulesOut,
+    RuleCatalogEntryOut,
+    SaveRulesIn,
+    SetStatusIn,
+)
 from databricks_labs_dqx_app.backend.services.rules_catalog_service import RulesCatalogService
 
 router = APIRouter()
@@ -92,6 +98,34 @@ def save_rules(
     except Exception as e:
         logger.error(f"Failed to save rules for {body.table_fqn}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save rules: {e}")
+
+
+@router.post(
+    "/batch",
+    response_model=BatchSaveRulesOut,
+    operation_id="batchSaveRules",
+    dependencies=[require_role(*_AUTHORS_AND_ABOVE)],
+)
+def batch_save_rules(
+    body: BatchSaveRulesIn,
+    svc: Annotated[RulesCatalogService, Depends(get_rules_catalog_service)],
+    obo_ws: Annotated[WorkspaceClient, Depends(get_obo_ws)],
+) -> BatchSaveRulesOut:
+    """Save the same set of checks to multiple tables (reusable rules)."""
+    if not body.table_fqns:
+        raise HTTPException(status_code=400, detail="table_fqns must not be empty")
+    user = obo_ws.current_user.me()
+    user_email = user.user_name or "unknown"
+    saved: list[RuleCatalogEntryOut] = []
+    failed: list[dict[str, str]] = []
+    for fqn in body.table_fqns:
+        try:
+            entry = svc.save(fqn, body.checks, user_email)
+            saved.append(_entry_to_out(entry))
+        except Exception as e:
+            logger.error(f"Failed to save rules for {fqn}: {e}", exc_info=True)
+            failed.append({"table_fqn": fqn, "error": str(e)})
+    return BatchSaveRulesOut(saved=saved, failed=failed)
 
 
 @router.delete(

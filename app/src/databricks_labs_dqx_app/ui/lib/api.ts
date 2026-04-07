@@ -40,6 +40,49 @@ export interface AnomalyConfig {
   registry_table?: AnomalyConfigRegistryTable;
 }
 
+export type BatchProfileRunInProfileOptionsAnyOf = { [key: string]: unknown };
+
+/**
+ * Advanced profiler options applied to all tables
+ */
+export type BatchProfileRunInProfileOptions =
+  BatchProfileRunInProfileOptionsAnyOf | null;
+
+export interface BatchProfileRunIn {
+  /** List of fully qualified table names to profile */
+  table_fqns: string[];
+  /**
+   * Max rows to sample per table
+   * @maximum 100000
+   */
+  sample_limit?: number;
+  /** Advanced profiler options applied to all tables */
+  profile_options?: BatchProfileRunInProfileOptions;
+}
+
+export interface BatchProfileRunOut {
+  /** One entry per table with run_id, job_run_id, view_fqn */
+  runs: ProfileRunOut[];
+}
+
+export type BatchSaveRulesInChecksItem = { [key: string]: unknown };
+
+export interface BatchSaveRulesIn {
+  /** Fully qualified table names to apply the checks to */
+  table_fqns: string[];
+  /** List of check metadata dictionaries */
+  checks: BatchSaveRulesInChecksItem[];
+}
+
+export type BatchSaveRulesOutFailedItem = { [key: string]: string };
+
+export interface BatchSaveRulesOut {
+  /** Successfully saved rule sets */
+  saved: RuleCatalogEntryOut[];
+  /** Tables that failed: [{table_fqn, error}] */
+  failed?: BatchSaveRulesOutFailedItem[];
+}
+
 export type CatalogOutComment = string | null;
 
 export interface CatalogOut {
@@ -127,6 +170,8 @@ export interface DryRunResultsOut {
 export interface DryRunSubmitOut {
   run_id: string;
   job_run_id: number;
+  /** Temporary view FQN for cleanup tracking */
+  view_fqn: string;
 }
 
 export type ExtraParamsResultColumnNames = { [key: string]: string };
@@ -282,6 +327,8 @@ export interface ProfileRunIn {
 export interface ProfileRunOut {
   run_id: string;
   job_run_id: number;
+  /** Temporary view FQN for cleanup tracking */
+  view_fqn: string;
 }
 
 export type ProfileRunSummaryOutStatus = string | null;
@@ -425,6 +472,8 @@ export interface RunStatusOut {
   state: string;
   result_state?: RunStatusOutResultState;
   message?: RunStatusOutMessage;
+  /** Whether the temporary view was cleaned up */
+  view_cleaned_up?: boolean;
 }
 
 export type SaveRulesInChecksItem = { [key: string]: unknown };
@@ -726,10 +775,12 @@ export type RejectRulesBody = SetStatusIn | null;
 
 export type GetDryRunStatusParams = {
   job_run_id: number;
+  view_fqn?: string | null;
 };
 
 export type GetProfileRunStatusParams = {
   job_run_id: number;
+  view_fqn?: string | null;
 };
 
 /**
@@ -4073,6 +4124,332 @@ export function useListTablesSuspense<
 }
 
 /**
+ * Return fully qualified names for all tables in a schema (for batch profiling).
+ * @summary List All Table Fqns
+ */
+export const listAllTableFqns = (
+  catalog: string,
+  schema: string,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<string[]>> => {
+  return axios.default.get(
+    `/api/v1/discovery/catalogs/${catalog}/schemas/${schema}/all-table-fqns`,
+    options,
+  );
+};
+
+export const getListAllTableFqnsQueryKey = (
+  catalog?: string,
+  schema?: string,
+) => {
+  return [
+    `/api/v1/discovery/catalogs/${catalog}/schemas/${schema}/all-table-fqns`,
+  ] as const;
+};
+
+export const getListAllTableFqnsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAllTableFqnsQueryKey(catalog, schema);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAllTableFqns>>
+  > = ({ signal }) =>
+    listAllTableFqns(catalog, schema, { signal, ...axiosOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(catalog && schema),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAllTableFqns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListAllTableFqnsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllTableFqns>>
+>;
+export type ListAllTableFqnsQueryError = AxiosError<HTTPValidationError>;
+
+export function useListAllTableFqns<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAllTableFqns>>,
+          TError,
+          Awaited<ReturnType<typeof listAllTableFqns>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAllTableFqns<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAllTableFqns>>,
+          TError,
+          Awaited<ReturnType<typeof listAllTableFqns>>
+        >,
+        "initialData"
+      >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAllTableFqns<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List All Table Fqns
+ */
+
+export function useListAllTableFqns<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListAllTableFqnsQueryOptions(
+    catalog,
+    schema,
+    options,
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+export const getListAllTableFqnsSuspenseQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+) => {
+  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAllTableFqnsQueryKey(catalog, schema);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAllTableFqns>>
+  > = ({ signal }) =>
+    listAllTableFqns(catalog, schema, { signal, ...axiosOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
+    Awaited<ReturnType<typeof listAllTableFqns>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListAllTableFqnsSuspenseQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllTableFqns>>
+>;
+export type ListAllTableFqnsSuspenseQueryError =
+  AxiosError<HTTPValidationError>;
+
+export function useListAllTableFqnsSuspense<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options: {
+    query: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAllTableFqnsSuspense<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListAllTableFqnsSuspense<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List All Table Fqns
+ */
+
+export function useListAllTableFqnsSuspense<
+  TData = Awaited<ReturnType<typeof listAllTableFqns>>,
+  TError = AxiosError<HTTPValidationError>,
+>(
+  catalog: string,
+  schema: string,
+  options?: {
+    query?: Partial<
+      UseSuspenseQueryOptions<
+        Awaited<ReturnType<typeof listAllTableFqns>>,
+        TError,
+        TData
+      >
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseSuspenseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListAllTableFqnsSuspenseQueryOptions(
+    catalog,
+    schema,
+    options,
+  );
+
+  const query = useSuspenseQuery(
+    queryOptions,
+    queryClient,
+  ) as UseSuspenseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  query.queryKey = queryOptions.queryKey;
+
+  return query;
+}
+
+/**
  * @summary Get Table Columns
  */
 export const getTableColumns = (
@@ -5526,6 +5903,89 @@ export const useDeleteRules = <
 };
 
 /**
+ * Save the same set of checks to multiple tables (reusable rules).
+ * @summary Batch Save Rules
+ */
+export const batchSaveRules = (
+  batchSaveRulesIn: BatchSaveRulesIn,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<BatchSaveRulesOut>> => {
+  return axios.default.post(`/api/v1/rules/batch`, batchSaveRulesIn, options);
+};
+
+export const getBatchSaveRulesMutationOptions = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof batchSaveRules>>,
+    TError,
+    { data: BatchSaveRulesIn },
+    TContext
+  >;
+  axios?: AxiosRequestConfig;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof batchSaveRules>>,
+  TError,
+  { data: BatchSaveRulesIn },
+  TContext
+> => {
+  const mutationKey = ["batchSaveRules"];
+  const { mutation: mutationOptions, axios: axiosOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, axios: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof batchSaveRules>>,
+    { data: BatchSaveRulesIn }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return batchSaveRules(data, axiosOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type BatchSaveRulesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof batchSaveRules>>
+>;
+export type BatchSaveRulesMutationBody = BatchSaveRulesIn;
+export type BatchSaveRulesMutationError = AxiosError<HTTPValidationError>;
+
+/**
+ * @summary Batch Save Rules
+ */
+export const useBatchSaveRules = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof batchSaveRules>>,
+      TError,
+      { data: BatchSaveRulesIn },
+      TContext
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof batchSaveRules>>,
+  TError,
+  { data: BatchSaveRulesIn },
+  TContext
+> => {
+  const mutationOptions = getBatchSaveRulesMutationOptions(options);
+
+  return useMutation(mutationOptions, queryClient);
+};
+
+/**
  * Submit a rule set for approval (Rule Author and above).
  * @summary Submit For Approval
  */
@@ -5874,7 +6334,7 @@ export const useSubmitDryRun = <
 };
 
 /**
- * Poll the status of a dry-run job.
+ * Poll the status of a dry-run job. Cleans up the view when job terminates.
  * @summary Get Dry Run Status
  */
 export const getDryRunStatus = (
@@ -6842,7 +7302,95 @@ export const useSubmitProfileRun = <
 };
 
 /**
- * Poll the status of a profiler job run.
+ * Create temporary views and submit profiler jobs for multiple tables in parallel.
+ * @summary Submit Batch Profile Run
+ */
+export const submitBatchProfileRun = (
+  batchProfileRunIn: BatchProfileRunIn,
+  options?: AxiosRequestConfig,
+): Promise<AxiosResponse<BatchProfileRunOut>> => {
+  return axios.default.post(
+    `/api/v1/profiler/batch-run`,
+    batchProfileRunIn,
+    options,
+  );
+};
+
+export const getSubmitBatchProfileRunMutationOptions = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitBatchProfileRun>>,
+    TError,
+    { data: BatchProfileRunIn },
+    TContext
+  >;
+  axios?: AxiosRequestConfig;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitBatchProfileRun>>,
+  TError,
+  { data: BatchProfileRunIn },
+  TContext
+> => {
+  const mutationKey = ["submitBatchProfileRun"];
+  const { mutation: mutationOptions, axios: axiosOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, axios: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitBatchProfileRun>>,
+    { data: BatchProfileRunIn }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return submitBatchProfileRun(data, axiosOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitBatchProfileRunMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitBatchProfileRun>>
+>;
+export type SubmitBatchProfileRunMutationBody = BatchProfileRunIn;
+export type SubmitBatchProfileRunMutationError =
+  AxiosError<HTTPValidationError>;
+
+/**
+ * @summary Submit Batch Profile Run
+ */
+export const useSubmitBatchProfileRun = <
+  TError = AxiosError<HTTPValidationError>,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof submitBatchProfileRun>>,
+      TError,
+      { data: BatchProfileRunIn },
+      TContext
+    >;
+    axios?: AxiosRequestConfig;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof submitBatchProfileRun>>,
+  TError,
+  { data: BatchProfileRunIn },
+  TContext
+> => {
+  const mutationOptions = getSubmitBatchProfileRunMutationOptions(options);
+
+  return useMutation(mutationOptions, queryClient);
+};
+
+/**
+ * Poll the status of a profiler job run. Cleans up the view when job terminates.
  * @summary Get Profile Run Status
  */
 export const getProfileRunStatus = (
