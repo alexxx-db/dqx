@@ -323,7 +323,7 @@ All target-level variables, their defaults, and what they control:
 | `dqx_service_principal_application_id` | `00000000-…` | **Yes** | Application ID of the service principal that runs the task-runner job. Created in [Step 1](#step-1-create-a-service-principal). The placeholder default fails validation. |
 | `studio_user_group` | `dqx-studio-users` | Must exist | Audience group for warehouse, app, dashboard, and schema access; supplied to `DQX_USER_GROUPS` as a JSON list. Accepts `users` for DAB broad mode (workspace ACL `users`, UC `account users`); `account users` and `admins` are rejected. Set via `make app-deploy STUDIO_USER_GROUP=...`. |
 | `admin_group` | `admins` (bundle and local Python) | Yes for prod | Workspace group whose members get the in-app `ADMIN` role unconditionally (bootstrap admin path), may run setup, and receives app/warehouse `CAN_USE`, dashboard `CAN_READ`, and (when it is a custom account group, not `admins`) the admin UC grants. Workspace `admins` members may always run setup. Override per target with a dedicated account group (e.g. `dqx-admins-prod`) so administrators also receive Unity Catalog access; with `admins`, administrators must also belong to the audience group to use OBO features. In every path, `AppConfig` defaults to the workspace `admins` group; `DQX_ADMIN_GROUP` overrides that default for local testing or deployment. Additional roles are assigned at runtime via the in-app Role Management UI. |
-| `app_name` | `dqx-studio` | No | Deployed Databricks App name. Override per target (e.g. `dqx-studio-dev`, `dqx-studio-prod`) when deploying multiple targets to the same workspace, or for personal sandboxes. |
+| `app_name` | `dqx-studio-<user>` | No | Deployed Databricks App name (workspace-global, ≤30 chars). The default is namespaced by the deploying user (`${workspace.current_user.domain_friendly_name}`) so shared-workspace dev deploys do not collide; the `release` target pins the stable name `dqx-studio`. Override per target when the resolved name is too long or must differ (e.g. `dqx-studio-dev`, `dqx-studio-prod`). |
 | `sql_warehouse_name` | `dqx-studio-sql-warehouse` | No | Name of the bundle-managed SQL warehouse. Override per target to avoid duplicates in shared workspaces. |
 | `sql_warehouse_size` | `Small` | No | Cluster size of the bundle-managed warehouse (e.g. `2X-Small`, `Small`, `Medium`). |
 | `schema_name` | `${var.prefix}` | No | Main schema — holds run history, profiling, metrics, and quarantine tables. Derived from `prefix`; declared as `resources.schemas.main_schema` in the bundle with `lifecycle.prevent_destroy: true`. |
@@ -481,7 +481,7 @@ Setup reconciles the Genie space (when one is configured) by **additively** gran
 
 Both DAB and Marketplace use the `genie` user-authorization scope; sign in again to renew consent when the scope changes. Replacing the bound warehouse re-runs the warehouse checks and reconciles the Genie space's compute; verify the OBO audience's SQL access on the replacement warehouse.
 
-To share the app in Marketplace (or recover an ACL), go to **Compute > Apps > `<app-name>` > Permissions** and assign `Can Use` to the audience and administrator groups; see [App sharing](#app-sharing). DAB applies this via `studio_user_group` and `admin_group`. Replace `<app-name>` with the configured app name (default `dqx-studio`).
+To share the app in Marketplace (or recover an ACL), go to **Compute > Apps > `<app-name>` > Permissions** and assign `Can Use` to the audience and administrator groups; see [App sharing](#app-sharing). DAB applies this via `studio_user_group` and `admin_group`. Replace `<app-name>` with the configured app name (`dqx-studio-<user>` in dev deploys; `dqx-studio` on the `release` target).
 
 Access the app at:
 ```
@@ -522,7 +522,7 @@ cd app && databricks bundle deploy -p <your-profile> -t <your-target>
 
 ## Monitor and Manage
 
-Replace `<app-name>` with the deployed app name (the value of `app_name` for your target — default `dqx-studio`):
+Replace `<app-name>` with the deployed app name (the value of `app_name` for your target — `dqx-studio-<user>` in dev, `dqx-studio` on the `release` target):
 
 ```bash
 databricks apps get <app-name> -p <your-profile>    # status
