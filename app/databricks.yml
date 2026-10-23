@@ -131,14 +131,16 @@ variables:
       # doesn't fight itself across workers. The in-memory CacheFactory is per
       # worker (TTL, non-authoritative) so adding workers is otherwise safe.
       # ``uv run`` resolves the app's locked environment at container start.
+      # ``python -m`` (backend/__main__.py) binds uvicorn to 0.0.0.0 on the
+      # platform-assigned DATABRICKS_APP_PORT — the bare ``uvicorn`` CLI ignored
+      # it and bound 127.0.0.1:8000 instead.
       command:
         - "uv"
         - "run"
         - "--no-dev"
-        - "uvicorn"
-        - "databricks_labs_dqx_app.backend.app:app"
-        - "--workers"
-        - "1"
+        - "python"
+        - "-m"
+        - "databricks_labs_dqx_app.backend"
       env:
         - name: "DATABRICKS_WAREHOUSE_ID"
           value_from: "dqx-sql-warehouse"
