@@ -676,7 +676,10 @@ class WorkflowDeployment(InstallationMixin):
         envs = [
             jobs.JobEnvironment(
                 environment_key=self.CLUSTER_KEY,
-                spec=compute.Environment(client="1", dependencies=remote_wheels),
+                # Serverless environment client version — keep in step with the
+                # Studio and MCP task runners (spec.client "5" in app/ and
+                # mcp-server/databricks.yml).
+                spec=compute.Environment(client="5", dependencies=remote_wheels),
             )
         ]
         return job_tasks, envs

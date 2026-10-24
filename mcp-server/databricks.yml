@@ -232,7 +232,9 @@ resources:
       environments:
         - environment_key: default
           spec:
-            environment_version: "2"
+            # Serverless environment client version — keep in step with the Studio
+            # task runner (app/databricks.yml, spec.client "5").
+            client: "5"
             # See var.runner_environment_dependencies for the list + rationale (a complex
             # variable so the dev-coverage target can extend it for CI/test deploys).
             dependencies: ${var.runner_environment_dependencies}
