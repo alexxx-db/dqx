@@ -36,8 +36,13 @@ variables:
     description: "UC grantee for the audience; account users in broad mode"
     default: "${var.studio_user_group}"
   app_name:
-    description: "Databricks App name (unique per workspace)"
-    default: "dqx-studio"
+    description: >
+      Databricks App name. App names are workspace-global and limited to 30
+      lowercase letters, digits, and hyphens, so shared-development deploys are
+      namespaced by the deploying user to avoid collisions; the release target
+      below overrides this with the stable production name. If the resolved
+      name is too long or collides, override it in your untracked target.*.yml.
+    default: "dqx-studio-${workspace.current_user.domain_friendly_name}"
   sql_warehouse_name:
     description: "Name of the bundle-managed SQL warehouse the app queries through."
     default: "dqx-studio-sql-warehouse"
@@ -568,6 +573,9 @@ targets:
       exclude:
         - .build/**
     variables:
+      # Stable production app name — the default above is namespaced per user
+      # for shared development workspaces.
+      app_name: "dqx-studio"
       app_source_path: "marketplace"
       task_runner_wheel_path: "./marketplace/tasks/databricks_labs_dqx_task_runner-*.whl"
     artifacts:
