@@ -2,10 +2,9 @@ command:
   - uv
   - run
   - --no-dev
-  - uvicorn
-  - databricks_labs_dqx_app.backend.app:app
-  - --workers
-  - "1"
+  - python
+  - -m
+  - databricks_labs_dqx_app.backend
 env:
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: dqx-sql-warehouse
